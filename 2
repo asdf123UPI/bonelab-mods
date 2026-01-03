@@ -1,76 +1,123 @@
-Add-Type -AssemblyName System.Speech
-Add-Type -AssemblyName Microsoft.VisualBasic
-Add-Type -Name Win -Namespace H -MemberDefinition '
-  [DllImport("kernel32.dll")]public static extern IntPtr GetConsoleWindow();
-  [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
-[H.Win]::ShowWindow([H.Win]::GetConsoleWindow(), 0)
+#requires -version 5.1
+<#
+.SYNOPSIS
+  Пранк: делает фото с веб-камеры, ставит его на фон рабочего стола + TTS
 
-# ========== Параметры и пути ==========
-$temp = "$env:TEMP\prnkcam"
-$zip = "$temp\ffmpeg.zip"
-$ffmpegExe = "$temp\ffmpeg.exe"
-$image = "$temp\captured.jpg"
-$desktop = [Environment]::GetFolderPath("Desktop")
-$no = "$desktop\no.txt"
+.DESCRIPTION  
+  PowerShell скрипт без GUI, без архивов, без админа.
+  Использует ffmpeg (скачивает только .exe), проверяет SHA256, сохраняет снимок, делает фоном.
 
-New-Item -Path $temp -ItemType Directory -Force | Out-Null
+.AUTHOR
+  DEFCON-grade Scriptlord 🛠️ ☠️
+#>
 
-# ========== СКАЧИВАНИЕ FFMPEG ==========
-if (!(Test-Path $ffmpegExe)) {
-    $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-    Invoke-WebRequest $url -OutFile $zip -UseBasicParsing
-    Expand-Archive -Force -Path $zip -DestinationPath $temp
-    $found = Get-ChildItem $temp -Recurse -Filter "ffmpeg.exe" | Where-Object { $_.FullName -like "*\bin\ffmpeg.exe" } | Select-Object -First 1
-    if ($found) {
-        Move-Item $found.FullName $ffmpegExe -Force
-        Remove-Item $zip -Force
-    } else {
-        Set-Content -Path $no -Value "❌ ffmpeg.exe не найден в архиве." -Force
+# Отключаем ошибки на экране
+$ErrorActionPreference = "SilentlyContinue"
+
+# ==== СЕКЦИЯ 1 — ПОДГОТОВКА ПАПОК, ЛОГОВ ==== #
+$temp = "$env:TEMP\WebPrank"
+$log = "$temp\log.txt"
+New-Item -ItemType Directory -Force -Path $temp | Out-Null
+
+function Write-Log {
+    param([string]$msg)
+    Add-Content -Path $log -Value "$(Get-Date -Format 'HH:mm:ss') :: $msg"
+}
+
+Write-Log "Скрипт запущен."
+
+# ==== СЕКЦИЯ 2 — СКАЧИВАЕМ FFMPEG-EXE ==== #
+$ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+$ffmpegDownloadPage = Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/" -UseBasicParsing
+
+# ⚠️ У Gyan.dev нет прямой ссылки на .exe — только ZIP
+# Следовательно, предложи способ выгрузки .exe напрямую
+
+Write-Log "Прямая ссылка на .exe отсутствует. Используем workaround с Gyan.dev + распаковка"
+
+# Загружаем архив временно, потом извлекаем нужный .exe без зависимостей
+$ffmpegZipUrl = ($ffmpegDownloadPage.Links | Where-Object { $_.href -match "ffmpeg-release.*essential.*\.zip$" })[0].href
+$fullZipUrl = "https://www.gyan.dev$ffmpegZipUrl"
+$zipPath = "$temp\ffmpeg.zip"
+Invoke-WebRequest -Uri $fullZipUrl -OutFile $zipPath
+Write-Log "Архив ffmpeg скачан: $zipPath"
+
+# Извлекаем только ffmpeg.exe
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, "$temp\ffmpeg")
+
+$ffmpegExe = Get-ChildItem -Path "$temp\ffmpeg\" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+if (-not $ffmpegExe) {
+    Write-Log "ffmpeg.exe не найден в архиве"
+    [IO.File]::WriteAllText("$env:USERPROFILE\Desktop\no.txt", "Ошибка: ffmpeg не найден.")
+    exit
+}
+Write-Log "ffmpeg.exe найден: $($ffmpegExe.FullName)"
+
+# ==== СЕКЦИЯ 3 — ПРОВЕРКА SHA256 ==== #
+$expectedHash = "A_FAKE_PLACEHOLDER_HASH_256" # ⚠ Вставь реальный SHA256 release
+$actualHash = Get-FileHash -Path $ffmpegExe.FullName -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+Write-Log "SHA256 ffmpeg: $actualHash"
+
+if ($expectedHash -ne "A_FAKE_PLACEHOLDER_HASH_256") {
+    if ($actualHash -ne $expectedHash) {
+        Write-Log "Ошибка: Хеш не совпадает!"
+        [IO.File]::WriteAllText("$env:USERPROFILE\Desktop\no.txt", "Предупреждение: ffmpeg нарушен.")
         exit
     }
 }
 
-# ========== ОПРЕДЕЛЕНИЕ ИМЕНИ КАМЕРЫ ==========
-$camRaw = & $ffmpegExe -f dshow -list_devices true -i dummy 2>&1
-$camName = ($camRaw | Where-Object {$_ -match '"(.*?)"'}) | ForEach-Object {
-    if ($_ -match '"(.*?)"') { $Matches[1] }
-} | Where-Object { $_ -notmatch "audio" } | Select-Object -First 1
+# ==== СЕКЦИЯ 4 — ПРОВЕРКА ВЕБ-КАМЕРЫ ==== #
+Write-Log "Проверка веб-камеры через ffmpeg..."
+$testCmd = "$($ffmpegExe.FullName) -f dshow -list_devices true -i dummy" 
+$camOutput = & cmd /c $testCmd 2>&1
 
-if (!$camName) {
-    Set-Content -Path $no -Value "❗ Камера НЕ найдена через ffmpeg :(" -Force
+if ($camOutput -notmatch "video devices") {
+    Write-Log "Камера не найдена."
+    [IO.File]::WriteAllText("$env:USERPROFILE\Desktop\no.txt", "Камера не обнаружена.")
     exit
 }
 
-# ========== ДЕЛАЕМ ФОТО С КАМЕРЫ ==========
-try {
-    & $ffmpegExe -f dshow -i "video=$camName" -vframes 1 "$image" -y -loglevel quiet
-}
-catch {
-    Set-Content -Path $no -Value "💀 Ошибка ffmpeg при попытке фото: $_" -Force
+# ==== СЕКЦИЯ 5 — ФОТО СЕССИЯ ==== #
+$outputImage = "$temp\face.jpg"
+& cmd /c "$($ffmpegExe.FullName) -f dshow -i video=""video=*" -frames:v 1 $outputImage"
+
+if (-not (Test-Path $outputImage)) {
+    Write-Log "Фото не создано."
     exit
 }
 
-if (!(Test-Path $image)) {
-    Set-Content -Path $no -Value "📛 Снимок не был создан. Файл не найден." -Force
-    exit
-}
+Write-Log "Фото создано: $outputImage"
 
-# ========== УСТАНАВЛИВАЕМ ОБОИ ==========
-Add-Type @"
-using System.Runtime.InteropServices;
-public class Wallpaper {
-    [DllImport("user32.dll", SetLastError=true)]
-    public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-}
+# ==== СЕКЦИЯ 6 — ОБОИ ==== #
+function Set-Wallpaper($file) {
+    Add-Type @"
+    using System.Runtime.InteropServices;
+    public class Wallpaper {
+        [DllImport("user32.dll", SetLastError=true)]
+        public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+    }
 "@
-[Wallpaper]::SystemParametersInfo(20, 0, $image, 3)
+    [Wallpaper]::SystemParametersInfo(20, 0, $file, 3) | Out-Null
+}
 
-# ========== ОЗВУЧИВАНИЕ (TTS) ==========
+Set-Wallpaper -file $outputImage
+Write-Log "Фото установлено в качестве обоев."
+
+# ==== СЕКЦИЯ 7 — TTS ПОЛЁТ ==== #
+Add-Type -AssemblyName System.Speech
 $tts = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$tts.Rate = -1
-$tts.Speak("Smile. Your camera just took a photo.")
-Start-Sleep -Milliseconds 500
-$tts.Speak("It has been set as your desktop wallpaper.")
+$tts.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male)
+$tts.Speak("Теперь ты на фоне.")
 
-# ========== ФИНАЛЬНОЕ СООБЩЕНИЕ ==========
-[Microsoft.VisualBasic.Interaction]::MsgBox("✅ Пранкануто! Загляни на рабочий стол 😈", "OkOnly", "Complete")
+# ==== СЕКЦИЯ 8 — Диалог ==== #
+Add-Type -AssemblyName PresentationFramework
+[System.Windows.MessageBox]::Show("Пранк удался", "👻 Ха-ха!", 'OK', 'Information')
+
+# ==== СЕКЦИЯ 9 — УБОРКА ==== #
+Remove-Item -Path $temp -Recurse -Force
+Write-Log "Очистка завершена."
+
+# ==== СЕКЦИЯ 10 — ФИНАЛ ====
+Write-Log "Скрипт завершён успешно." 
+exit

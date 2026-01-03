@@ -5,61 +5,57 @@ Add-Type -Name Win -Namespace H -MemberDefinition '
   [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
 [H.Win]::ShowWindow([H.Win]::GetConsoleWindow(), 0)
 
-# === ПУТИ ===
+# ========== Параметры и пути ==========
 $temp = "$env:TEMP\prnkcam"
-$ffmpegZip = "$temp\ffmpeg.zip"
+$zip = "$temp\ffmpeg.zip"
 $ffmpegExe = "$temp\ffmpeg.exe"
-$image = "$temp\shot.jpg"
+$image = "$temp\captured.jpg"
 $desktop = [Environment]::GetFolderPath("Desktop")
-$noFile = "$desktop\no.txt"
+$no = "$desktop\no.txt"
 
 New-Item -Path $temp -ItemType Directory -Force | Out-Null
 
-# === СКАЧИВАЕМ ffmpeg и распаковываем ===
+# ========== СКАЧИВАНИЕ FFMPEG ==========
 if (!(Test-Path $ffmpegExe)) {
-    Write-Host "📦 Downloading ffmpeg..."
-    $url = "https://github.com/ffbinaries/ffbinaries-prebuilt/releases/download/v4.4.1/ffmpeg-win64.zip"
-    Invoke-WebRequest $url -OutFile $ffmpegZip -UseBasicParsing
-
-    Expand-Archive -Force -Path $ffmpegZip -DestinationPath $temp
-
-    $found = Get-ChildItem -Path $temp -Recurse -Include "ffmpeg.exe" | Select-Object -First 1
+    $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    Invoke-WebRequest $url -OutFile $zip -UseBasicParsing
+    Expand-Archive -Force -Path $zip -DestinationPath $temp
+    $found = Get-ChildItem $temp -Recurse -Filter "ffmpeg.exe" | Where-Object { $_.FullName -like "*\bin\ffmpeg.exe" } | Select-Object -First 1
     if ($found) {
         Move-Item $found.FullName $ffmpegExe -Force
-        Remove-Item $ffmpegZip -Force
+        Remove-Item $zip -Force
     } else {
-        Set-Content -Path $noFile -Value "❌ ffmpeg not found after extraction." -Force
+        Set-Content -Path $no -Value "❌ ffmpeg.exe не найден в архиве." -Force
         exit
     }
 }
 
-# === НАХОДИМ ИМЯ КАМЕРЫ ===
-Write-Host "🎥 Detecting camera..."
+# ========== ОПРЕДЕЛЕНИЕ ИМЕНИ КАМЕРЫ ==========
 $camRaw = & $ffmpegExe -f dshow -list_devices true -i dummy 2>&1
 $camName = ($camRaw | Where-Object {$_ -match '"(.*?)"'}) | ForEach-Object {
     if ($_ -match '"(.*?)"') { $Matches[1] }
-} | Where-Object {$_ -notmatch "audio"} | Select-Object -First 1
+} | Where-Object { $_ -notmatch "audio" } | Select-Object -First 1
 
 if (!$camName) {
-    Set-Content -Path $noFile -Value "❗ Камера не найдена ffmpeg'ом." -Force
+    Set-Content -Path $no -Value "❗ Камера НЕ найдена через ffmpeg :(" -Force
     exit
 }
 
-# === ДЕЛАЕМ СНИМОК ===
-Write-Host "📸 Taking photo from: $camName..."
+# ========== ДЕЛАЕМ ФОТО С КАМЕРЫ ==========
 try {
     & $ffmpegExe -f dshow -i "video=$camName" -vframes 1 "$image" -y -loglevel quiet
 }
 catch {
-    Set-Content -Path $noFile -Value "💥 Ошибка при съёмке с камеры: $camName" -Force
-    exit
-}
-if (!(Test-Path $image)) {
-    Set-Content -Path $noFile -Value "❌ Снимок не был сохранён. Что-то пошло не так." -Force
+    Set-Content -Path $no -Value "💀 Ошибка ffmpeg при попытке фото: $_" -Force
     exit
 }
 
-# === СТАВИМ ОБОИ ===
+if (!(Test-Path $image)) {
+    Set-Content -Path $no -Value "📛 Снимок не был создан. Файл не найден." -Force
+    exit
+}
+
+# ========== УСТАНАВЛИВАЕМ ОБОИ ==========
 Add-Type @"
 using System.Runtime.InteropServices;
 public class Wallpaper {
@@ -69,12 +65,12 @@ public class Wallpaper {
 "@
 [Wallpaper]::SystemParametersInfo(20, 0, $image, 3)
 
-# === TTS ВКЛЮЧАЕМ ===
-$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$speak.Rate = -1
-$speak.Speak("Smile. Your camera just took a picture.")
-Start-Sleep -Milliseconds 800
-$speak.Speak("It has replaced your desktop forever.")
+# ========== ОЗВУЧИВАНИЕ (TTS) ==========
+$tts = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$tts.Rate = -1
+$tts.Speak("Smile. Your camera just took a photo.")
+Start-Sleep -Milliseconds 500
+$tts.Speak("It has been set as your desktop wallpaper.")
 
-# === ФИНАЛЬНОЕ СООБЩЕНИЕ ===
-[Microsoft.VisualBasic.Interaction]::MsgBox("✅ Пранк удался! Посмотри на рабочий стол... 😈", "OkOnly", "PRANK COMPLETE")
+# ========== ФИНАЛЬНОЕ СООБЩЕНИЕ ==========
+[Microsoft.VisualBasic.Interaction]::MsgBox("✅ Пранкануто! Загляни на рабочий стол 😈", "OkOnly", "Complete")

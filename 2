@@ -8,24 +8,42 @@ Add-Type -Name Win -Namespace H -MemberDefinition '
 $consolePtr = [H.Win]::GetConsoleWindow()
 [H.Win]::ShowWindow($consolePtr, 0)
 
-# Create temp directory
+# Prepare paths
 $TempPath = "$env:TEMP\prnkcam"
-New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
 $FfmpegPath = "$TempPath\ffmpeg.exe"
-$ImagePath = "$TempPath\you_have_been_captured.jpg"
+$ImagePath = "$TempPath\captured.jpg"
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$NoFile = "$Desktop\no.txt"
 
-# Download ffmpeg (static build, cam-support, ~5MB) if not exists
+# Ensure temp dir
+New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
+
+# Download ffmpeg if needed
 if (!(Test-Path $FfmpegPath)) {
-    Invoke-WebRequest -Uri "https://github.com/ffbinaries/ffbinaries-prebuilt/releases/download/v4.4.1/ffmpeg-win64.zip" -OutFile "$TempPath\ffmpeg.zip" -UseBasicParsing
-    Expand-Archive -Path "$TempPath\ffmpeg.zip" -DestinationPath $TempPath -Force
-    Move-Item -Path "$TempPath\ffmpeg.exe" -Destination $FfmpegPath -Force
+    Invoke-WebRequest "https://github.com/ffbinaries/ffbinaries-prebuilt/releases/download/v4.4.1/ffmpeg-win64.zip" -OutFile "$TempPath\ffmpeg.zip" -UseBasicParsing
+    Expand-Archive "$TempPath\ffmpeg.zip" -DestinationPath $TempPath -Force
+    $ffFound = Get-ChildItem "$TempPath" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+    if ($ffFound) { Move-Item $ffFound.FullName $FfmpegPath -Force }
     Remove-Item "$TempPath\ffmpeg.zip" -Force
 }
 
-# Take photo from default camera
-Start-Process -FilePath $FfmpegPath -ArgumentList "-f dshow -i video=`"video=Integrated Camera`" -vframes 1 `"$ImagePath`"" -Wait -NoNewWindow
+# Detect camera name
+$camListRaw = & $FfmpegPath -list_devices true -f dshow -i dummy 2>&1
+$camDevice = ($camListRaw | Select-String "video devices" -Context 0,10 | Select-String '\"(.*)\"').Matches.Groups[1].Value
 
-# Set the captured image as wallpaper
+if (-not $camDevice) {
+    Set-Content -Path $NoFile -Value "No camera detected." -Force
+    exit
+}
+
+# Attempt capture
+& $FfmpegPath -f dshow -i "video=$camDevice" -vframes 1 "$ImagePath" -y -loglevel quiet
+if (!(Test-Path $ImagePath)) {
+    Set-Content -Path $NoFile -Value "Failed to capture image from camera." -Force
+    exit
+}
+
+# Set as wallpaper
 Add-Type @"
 using System.Runtime.InteropServices;
 public class Wallpaper {
@@ -35,13 +53,14 @@ public class Wallpaper {
 "@
 [Wallpaper]::SystemParametersInfo(20, 0, $ImagePath, 3)
 
-# TTS Message
+# Speak fun message
 $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $speak.Rate = -1
-$speak.Volume = 100
+$speak.SelectVoice("Microsoft Zira Desktop")
 $speak.Speak("Smile. You’ve been captured.")
-Start-Sleep -Milliseconds 700
-$speak.Speak("You are now part of the wallpaper.")
+Start-Sleep -Milliseconds 800
+$speak.Speak("You are now a permanent background.")
 
-# Messagebox
-[Microsoft.VisualBasic.Interaction]::MsgBox("This was a prank. No data was sent. Check your desktop 😈", "OKOnly,Info", "Prank Complete")
+# Final popup
+[Microsoft.VisualBasic.Interaction]::MsgBox("This was a prank. Nothing harmful was done. Check your wallpaper 😈", "OKOnly,Info", "PRANK COMPLETE")
+exit

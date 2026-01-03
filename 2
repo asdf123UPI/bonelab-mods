@@ -1,193 +1,78 @@
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName System.Speech
+Add-Type -AssemblyName Microsoft.VisualBasic
 
-# ——— СТИЛЬНАЯ ВЫВОДИЛКА
-function Write-Slow($text, $delay = 30) {
-    foreach ($c in $text.ToCharArray()) {
-        Write-Host -NoNewline $c
-        Start-Sleep -Milliseconds $delay
-    }
-    Write-Host ""
+# Hide Console Window
+Add-Type -Name Win -Namespace H -MemberDefinition '
+  [DllImport("kernel32.dll")]public static extern IntPtr GetConsoleWindow();
+  [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
+$consolePtr = [H.Win]::GetConsoleWindow()
+[H.Win]::ShowWindow($consolePtr, 0)
+
+# Text To Speech Init
+$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$speak.Rate = -2
+$speak.SelectVoice('Microsoft Zira Desktop')
+
+# Scary Speech Sequence
+$speak.Speak("WARNING. Unauthorized activity detected.")
+Start-Sleep -Milliseconds 800
+$speak.Speak("System lockdown commencing in three two one...")
+Start-Sleep -Milliseconds 1000
+
+# Keyboard light flickering (Scroll lock)
+for ($i = 0; $i -lt 5; $i++) {
+    (New-Object -ComObject WScript.Shell).SendKeys("{SCROLLLOCK}")
+    Start-Sleep -Milliseconds 300
 }
 
-# ——— СКАЧКА + РАСПАКОВКА AForge
-function Install-AForge {
-    $aforgeDir = "$env:TEMP\aforge"
-    $nupkgUrl = "https://www.nuget.org/api/v2/package/AForge.Video.DirectShow/2.2.5"
+# Fake terminal format output
+Write-Host "`e[91mInitiating programmatic wipe..." -ForegroundColor Red
+for ($i=0; $i -le 100; $i+=4) {
+    Write-Host -NoNewline "$i% "
+    Start-Sleep -Milliseconds 80
+}
+Write-Host "`n`e[92mDrive formatted successfully."
 
-    if (-Not (Test-Path $aforgeDir)) {
-        New-Item -ItemType Directory -Path $aforgeDir | Out-Null
-    }
-
-    $nupkgPath = "$aforgeDir\aforge.nupkg"
-    $dllPath1 = "$aforgeDir\AForge.Video.dll"
-    $dllPath2 = "$aforgeDir\AForge.Video.DirectShow.dll"
-
-    if (-not ((Test-Path $dllPath1) -and (Test-Path $dllPath2))) {
-        Write-Host "[+] Скачиваем AForge DLL..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri $nupkgUrl -OutFile $nupkgPath -UseBasicParsing
-
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($nupkgPath, $aforgeDir)
-
-        $libPath = Get-ChildItem -Path "$aforgeDir\lib" -Recurse | Where-Object { $_.Name -eq "AForge.Video.dll" } | Select-Object -First 1
-
-        if (-Not $libPath) {
-            Write-Host "[!] Не удалось найти DLL в .nupkg" -ForegroundColor Red
-            return $false
-        }
-
-        Copy-Item $libPath.FullName -Destination "$aforgeDir\AForge.Video.dll" -Force
-        Copy-Item ($libPath.DirectoryName + "\AForge.Video.DirectShow.dll") -Destination "$aforgeDir\AForge.Video.DirectShow.dll" -Force
-    }
-
-    return $true
+# Mouse freeze simulation (lock in place)
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Cursor {
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int X, int Y);
+}
+"@
+for ($j=0; $j -lt 20; $j++) {
+    [Cursor]::SetCursorPos(800, 500)
+    Start-Sleep -Milliseconds 80
 }
 
-# ——— ЗАПУСК КАМЕРЫ
-function Show-Camera {
-    $aforgeDir = "$env:TEMP\aforge"
-    $dll1 = "$aforgeDir\AForge.Video.dll"
-    $dll2 = "$aforgeDir\AForge.Video.DirectShow.dll"
+# Open Camera App (light turns on)
+Start-Process "microsoft.windows.camera:"
+Start-Sleep -Seconds 1
+$speak.Speak("We see you...")
 
-    try {
-        [System.Reflection.Assembly]::LoadFrom($dll1) | Out-Null
-        [System.Reflection.Assembly]::LoadFrom($dll2) | Out-Null
-
-        $form = New-Object Windows.Forms.Form
-        $form.Text = "🔴 Камера активирована — наблюдение"
-        $form.Size = New-Object Drawing.Size(700, 500)
-        $form.StartPosition = 'CenterScreen'
-        $form.TopMost = $true
-
-        $pictureBox = New-Object Windows.Forms.PictureBox
-        $pictureBox.Dock = 'Fill'
-        $pictureBox.SizeMode = 'StretchImage'
-        $form.Controls.Add($pictureBox)
-
-        $videoDevices = New-Object AForge.Video.DirectShow.FilterInfoCollection([AForge.Video.DirectShow.FilterCategory]::VideoInputDevice)
-
-        if ($videoDevices.Count -eq 0) {
-            [Windows.Forms.MessageBox]::Show("Камера не найдена.","VACATAC Surveillance")
-            return
-        }
-
-        $videoSource = New-Object AForge.Video.DirectShow.VideoCaptureDevice($videoDevices[0].MonikerString)
-
-        $videoSource.NewFrame += {
-            param($sender, $eventArgs)
-            try {
-                $bitmap = $eventArgs.Frame.Clone()
-                $pictureBox.Image = $bitmap
-            } catch {}
-        }
-
-        $videoSource.Start()
-
-        $form.Add_FormClosed({
-            if ($videoSource.IsRunning) {
-                $videoSource.SignalToStop()
-                $videoSource.WaitForStop()
-            }
-        })
-
-        $form.ShowDialog()
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("Ошибка запуска камеры","CAMERA SYSTEM")
-    }
+# Change Desktop Wallpaper (creepy optional twist)
+$path = "$env:TEMP\you_are_not_safe.jpg"
+Invoke-WebRequest "https://i.imgur.com/qD429oF.jpg" -OutFile $path -UseBasicParsing
+Add-Type @"
+using System.Runtime.InteropServices;
+public class Wallpaper {
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 }
+"@
+[Wallpaper]::SystemParametersInfo(20, 0, $path, 3)
 
-# ——— ОСНОВНАЯ ПАНИКА
-$paths = @(
-    "C:\Windows\System32",
-    "C:\Program Files",
-    "C:\Users\Admin\Documents",
-    "C:\GPT\BrainData.db",
-    "C:\System\Vault_Mem",
-    $env:USERPROFILE
-)
+# Final Scary TTS Line
+$speak.Speak("Just kidding. You are safe, for now.")
 
-Clear-Host
-$host.UI.RawUI.WindowTitle = "VACATAC.EXE – SYSTEM OVERWRITE CORE"
-Write-Host "`n[!] Подключение к системному ядру..." -ForegroundColor Red
-Start-Sleep 1
-Write-Host "[#] Инициализация системного удаления..." -ForegroundColor Yellow
-Start-Sleep 2
+# Play default Windows sound
+Add-Type -AssemblyName System.Media
+$player = New-Object System.Media.SoundPlayer
+$player.SoundLocation = "$env:windir\Media\Windows Foreground.wav"
+$player.PlaySync()
 
-foreach ($path in $paths) {
-    Write-Slow "Deleting: $path..."
-    Start-Sleep -Milliseconds (Get-Random -Minimum 200 -Maximum 500)
-}
-
-# ——— ВСТАВКА КАМЕРЫ ПЕРЕД КНУТом
-if (Install-AForge) {
-    Show-Camera
-} else {
-    Write-Host "[!] Камера не будет активирована. Не удалось загрузить зависимости." -ForegroundColor Red
-    Start-Sleep 2
-}
-
-# ——— ФИНАЛЬНАЯ ИНТЕРАКТИВНАЯ ПАНЕЛЬ (ловушка)
-$form = New-Object Windows.Forms.Form
-$form.Text = "💥 Обнаружена критическая активность"
-$form.Width = 420
-$form.Height = 220
-$form.StartPosition = "CenterScreen"
-$form.BackColor = [Drawing.Color]::Black
-$form.ForeColor = [Drawing.Color]::Red
-$form.FormBorderStyle = 'FixedDialog'
-$form.TopMost = $true
-
-$label = New-Object Windows.Forms.Label
-$label.Text = "Приостановить разрушение системы?"
-$label.Font = 'Arial,14'
-$label.Dock = 'Top'
-$label.Height = 50
-$label.TextAlign = 'MiddleCenter'
-$form.Controls.Add($label)
-
-$btnStop = New-Object Windows.Forms.Button
-$btnStop.Text = "ОСТАНОВИТЬ"
-$btnStop.Width = 100
-$btnStop.Height = 40
-$btnStop.Location = New-Object Drawing.Point(30, 100)
-
-$btnContinue = New-Object Windows.Forms.Button
-$btnContinue.Text = "ПРОДОЛЖИТЬ"
-$btnContinue.Width = 100
-$btnContinue.Height = 40
-$btnContinue.Location = New-Object Drawing.Point(145, 100)
-
-$btnSpeed = New-Object Windows.Forms.Button
-$btnSpeed.Text = "УСКОРИТЬ"
-$btnSpeed.Width = 100
-$btnSpeed.Height = 40
-$btnSpeed.Location = New-Object Drawing.Point(260, 100)
-
-$form.Controls.AddRange(@($btnStop, $btnContinue, $btnSpeed))
-
-$btnStop.Add_Click({
-    [Windows.Forms.MessageBox]::Show("🛑 УДАЛЕНИЕ ПРЕРВАНО!`nВСЁ БЫЛО ПРАНКОМ.", "VACATAC: Mission aborted")
-    $form.Close()
-    exit
-})
-
-$btnContinue.Add_Click({
-    $form.Close()
-    for ($i = 1; $i -le 10; $i++) {
-        Write-Slow "Wip3:: \$Backup_$i.sysx"
-        Start-Sleep -Milliseconds 200
-    }
-    [Windows.Forms.MessageBox]::Show("💀 Удаление завершено.","SYSTEM REFORMAT COMPLETE")
-})
-
-$btnSpeed.Add_Click({
-    $form.Close()
-    for ($i = 1; $i -le 100; $i++) {
-        Write-Host "!!! WIPING SECTOR #$i..." -ForegroundColor DarkRed
-        Start-Sleep -Milliseconds 30
-    }
-    [Windows.Forms.MessageBox]::Show("🔥 Перезагрузка невозможна.","KERNEL DEADLOCK")
-})
-
-[void]$form.ShowDialog()
+# Message Box saying it's a prank
+[Microsoft.VisualBasic.Interaction]::MsgBox("Chill. It’s just a prank. No system changes made. - v1r_s.ps1", "OKOnly,Info", "😼 Gotcha")

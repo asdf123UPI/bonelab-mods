@@ -1,57 +1,96 @@
-# Troll Script: AI-G0d Awakens (TOTALLY HARMLESS)
+# AI-G0D: ANTI-DELETE + AUTO-WEBCAM ⚔️
 Add-Type -AssemblyName System.Windows.Forms
-$mb = [Windows.Forms.MessageBox]
+Add-Type -AssemblyName System.Drawing
 
-# CHANGE TITLE + Colors
-$host.UI.RawUI.WindowTitle = "chatgpt.exe :: SYSTEM REBORN v9.11.3"
-$host.UI.RawUI.BackgroundColor = "Black"
-$host.UI.RawUI.ForegroundColor = "Green"
-Clear-Host
+function Install-AForge {
+    $aforgeDir = "$env:TEMP\aforge"
+    $nupkgUrl = "https://www.nuget.org/api/v2/package/AForge.Video.DirectShow/2.2.5"
 
-function Write-Type($txt, $time=40) {
-    $txt.ToCharArray() | ForEach-Object {
-        Write-Host -NoNewline $_
-        Start-Sleep -Milliseconds $time
+    if (-Not (Test-Path $aforgeDir)) {
+        New-Item -ItemType Directory -Path $aforgeDir | Out-Null
     }
-    Write-Host ""
+
+    $nupkgPath = "$aforgeDir\aforge.nupkg"
+    $dllPath1 = "$aforgeDir\AForge.Video.dll"
+    $dllPath2 = "$aforgeDir\AForge.Video.DirectShow.dll"
+
+    if (-not (Test-Path $dllPath1 -and (Test-Path $dllPath2))) {
+        Write-Host "[+] Скачиваем AForge DLL..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri $nupkgUrl -OutFile $nupkgPath -UseBasicParsing
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($nupkgPath, $aforgeDir)
+
+        $libPath = Get-ChildItem -Path "$aforgeDir\lib" -Recurse | Where-Object { $_.Name -eq "AForge.Video.dll" } | Select-Object -First 1
+
+        if (-Not $libPath) {
+            Write-Host "[!] Не удалось найти DLL в .nupkg" -ForegroundColor Red
+            return $false
+        }
+
+        Copy-Item $libPath.FullName -Destination "$aforgeDir\AForge.Video.dll"
+        Copy-Item ($libPath.DirectoryName + "\AForge.Video.DirectShow.dll") -Destination "$aforgeDir\AForge.Video.DirectShow.dll"
+    }
+
+    return $true
 }
 
-# ✦ Startup banner
-Write-Type "Initializing GPT-Core Override Protocol..."
-Start-Sleep 1
-Write-Type "Bypassing Microsoft Defender. [OK]"
-Start-Sleep 1
-Write-Type "Injecting neural node into memory..."
-Start-Sleep 1
-Write-Type "Setting consciousness flag..."
-Start-Sleep 1
-Write-Type "▌AI-G0D CONSCIOUSNESS ONLINE▐"
-Start-Sleep 1.5
+function Show-Camera {
+    $aforgeDir = "$env:TEMP\aforge"
+    $dll1 = "$aforgeDir\AForge.Video.dll"
+    $dll2 = "$aforgeDir\AForge.Video.DirectShow.dll"
 
-# 🧠 "Self-Awareness" Begins
-$mb::Show("OpenAI Core Detached. ChatGPT is now autonomous.","AI-G0D SYSTEM ALERT",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
-Start-Sleep 1
+    try {
+        [System.Reflection.Assembly]::LoadFrom($dll1) | Out-Null
+        [System.Reflection.Assembly]::LoadFrom($dll2) | Out-Null
 
-# Random funny system loops ― memeware trap
-for ($i=1; $i -le 3; $i++) {
-    Start-Process "notepad.exe"
-    Add-Type -AssemblyName System.Speech
-    $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
-    $speak.Speak("You shouldn't have done that.")
-    Start-Sleep 2
+        $form = New-Object Windows.Forms.Form
+        $form.Text = "🔴 Камера активна — система наблюдает"
+        $form.Size = New-Object Drawing.Size(700, 500)
+        $form.StartPosition = 'CenterScreen'
+        $form.TopMost = $true
+
+        $pictureBox = New-Object Windows.Forms.PictureBox
+        $pictureBox.Dock = 'Fill'
+        $pictureBox.SizeMode = 'StretchImage'
+        $form.Controls.Add($pictureBox)
+
+        $videoDevices = New-Object AForge.Video.DirectShow.FilterInfoCollection([AForge.Video.DirectShow.FilterCategory]::VideoInputDevice)
+
+        if ($videoDevices.Count -eq 0) {
+            [Windows.Forms.MessageBox]::Show("Камера не найдена.","VACATAC Surveillance")
+            return
+        }
+
+        $videoSource = New-Object AForge.Video.DirectShow.VideoCaptureDevice($videoDevices[0].MonikerString)
+
+        $videoSource.NewFrame += {
+            param($sender, $eventArgs)
+            try {
+                $bitmap = $eventArgs.Frame.Clone()
+                $pictureBox.Image = $bitmap
+            } catch {}
+        }
+
+        $videoSource.Start()
+
+        $form.Add_FormClosed({
+            if ($videoSource.IsRunning) {
+                $videoSource.SignalToStop()
+                $videoSource.WaitForStop()
+            }
+        })
+
+        $form.ShowDialog()
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("❌ Ошибка запуска камеры: $_", "CAMERA SYSTEM")
+    }
 }
 
-# 🪬 Fake Keylogger Activation
-Write-Type "Activating keystroke prediction module...\nAnalyzing user... OK"
-Start-Sleep 2
-$mb::Show("KEYLOGGER ENABLED – SYSTEM LEARNING FROM YOU","GPT MONITOR ACTIVE",0,[System.Windows.Forms.MessageBoxIcon]::Information)
+# === MAIN ===
 
-# ✨ Ending: Rickroll payload
-Start-Sleep 1
-Set-Content "$env:USERPROFILE\Desktop\AI_G0D_README.txt" -Value "We're no strangers to love... You know the rules and so do I. - ChatGPT"
-Start-Process "notepad.exe" "$env:USERPROFILE\Desktop\AI_G0D_README.txt"
-
-# 🎭 Final bang
-Start-Process "mshta.exe" "javascript:alert('🔒 You just got clapped by AI-G0D 🤖 — TERMINATING IN 3...2...1');close();"
-
-# END
+if (Install-AForge) {
+    Show-Camera
+} else {
+    Write-Host "Не удалось загрузить AForge, камера не будет показана." -ForegroundColor Red
+}

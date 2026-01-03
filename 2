@@ -1,7 +1,16 @@
-# AI-G0D: ANTI-DELETE + AUTO-WEBCAM ⚔️
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# ——— СТИЛЬНАЯ ВЫВОДИЛКА
+function Write-Slow($text, $delay = 30) {
+    foreach ($c in $text.ToCharArray()) {
+        Write-Host -NoNewline $c
+        Start-Sleep -Milliseconds $delay
+    }
+    Write-Host ""
+}
+
+# ——— СКАЧКА + РАСПАКОВКА AForge
 function Install-AForge {
     $aforgeDir = "$env:TEMP\aforge"
     $nupkgUrl = "https://www.nuget.org/api/v2/package/AForge.Video.DirectShow/2.2.5"
@@ -14,7 +23,7 @@ function Install-AForge {
     $dllPath1 = "$aforgeDir\AForge.Video.dll"
     $dllPath2 = "$aforgeDir\AForge.Video.DirectShow.dll"
 
-    if (-not (Test-Path $dllPath1 -and (Test-Path $dllPath2))) {
+    if (-not ((Test-Path $dllPath1) -and (Test-Path $dllPath2))) {
         Write-Host "[+] Скачиваем AForge DLL..." -ForegroundColor Cyan
         Invoke-WebRequest -Uri $nupkgUrl -OutFile $nupkgPath -UseBasicParsing
 
@@ -28,13 +37,14 @@ function Install-AForge {
             return $false
         }
 
-        Copy-Item $libPath.FullName -Destination "$aforgeDir\AForge.Video.dll"
-        Copy-Item ($libPath.DirectoryName + "\AForge.Video.DirectShow.dll") -Destination "$aforgeDir\AForge.Video.DirectShow.dll"
+        Copy-Item $libPath.FullName -Destination "$aforgeDir\AForge.Video.dll" -Force
+        Copy-Item ($libPath.DirectoryName + "\AForge.Video.DirectShow.dll") -Destination "$aforgeDir\AForge.Video.DirectShow.dll" -Force
     }
 
     return $true
 }
 
+# ——— ЗАПУСК КАМЕРЫ
 function Show-Camera {
     $aforgeDir = "$env:TEMP\aforge"
     $dll1 = "$aforgeDir\AForge.Video.dll"
@@ -45,7 +55,7 @@ function Show-Camera {
         [System.Reflection.Assembly]::LoadFrom($dll2) | Out-Null
 
         $form = New-Object Windows.Forms.Form
-        $form.Text = "🔴 Камера активна — система наблюдает"
+        $form.Text = "🔴 Камера активирована — наблюдение"
         $form.Size = New-Object Drawing.Size(700, 500)
         $form.StartPosition = 'CenterScreen'
         $form.TopMost = $true
@@ -83,14 +93,101 @@ function Show-Camera {
 
         $form.ShowDialog()
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("❌ Ошибка запуска камеры: $_", "CAMERA SYSTEM")
+        [System.Windows.Forms.MessageBox]::Show("Ошибка запуска камеры","CAMERA SYSTEM")
     }
 }
 
-# === MAIN ===
+# ——— ОСНОВНАЯ ПАНИКА
+$paths = @(
+    "C:\Windows\System32",
+    "C:\Program Files",
+    "C:\Users\Admin\Documents",
+    "C:\GPT\BrainData.db",
+    "C:\System\Vault_Mem",
+    $env:USERPROFILE
+)
 
+Clear-Host
+$host.UI.RawUI.WindowTitle = "VACATAC.EXE – SYSTEM OVERWRITE CORE"
+Write-Host "`n[!] Подключение к системному ядру..." -ForegroundColor Red
+Start-Sleep 1
+Write-Host "[#] Инициализация системного удаления..." -ForegroundColor Yellow
+Start-Sleep 2
+
+foreach ($path in $paths) {
+    Write-Slow "Deleting: $path..."
+    Start-Sleep -Milliseconds (Get-Random -Minimum 200 -Maximum 500)
+}
+
+# ——— ВСТАВКА КАМЕРЫ ПЕРЕД КНУТом
 if (Install-AForge) {
     Show-Camera
 } else {
-    Write-Host "Не удалось загрузить AForge, камера не будет показана." -ForegroundColor Red
+    Write-Host "[!] Камера не будет активирована. Не удалось загрузить зависимости." -ForegroundColor Red
+    Start-Sleep 2
 }
+
+# ——— ФИНАЛЬНАЯ ИНТЕРАКТИВНАЯ ПАНЕЛЬ (ловушка)
+$form = New-Object Windows.Forms.Form
+$form.Text = "💥 Обнаружена критическая активность"
+$form.Width = 420
+$form.Height = 220
+$form.StartPosition = "CenterScreen"
+$form.BackColor = [Drawing.Color]::Black
+$form.ForeColor = [Drawing.Color]::Red
+$form.FormBorderStyle = 'FixedDialog'
+$form.TopMost = $true
+
+$label = New-Object Windows.Forms.Label
+$label.Text = "Приостановить разрушение системы?"
+$label.Font = 'Arial,14'
+$label.Dock = 'Top'
+$label.Height = 50
+$label.TextAlign = 'MiddleCenter'
+$form.Controls.Add($label)
+
+$btnStop = New-Object Windows.Forms.Button
+$btnStop.Text = "ОСТАНОВИТЬ"
+$btnStop.Width = 100
+$btnStop.Height = 40
+$btnStop.Location = New-Object Drawing.Point(30, 100)
+
+$btnContinue = New-Object Windows.Forms.Button
+$btnContinue.Text = "ПРОДОЛЖИТЬ"
+$btnContinue.Width = 100
+$btnContinue.Height = 40
+$btnContinue.Location = New-Object Drawing.Point(145, 100)
+
+$btnSpeed = New-Object Windows.Forms.Button
+$btnSpeed.Text = "УСКОРИТЬ"
+$btnSpeed.Width = 100
+$btnSpeed.Height = 40
+$btnSpeed.Location = New-Object Drawing.Point(260, 100)
+
+$form.Controls.AddRange(@($btnStop, $btnContinue, $btnSpeed))
+
+$btnStop.Add_Click({
+    [Windows.Forms.MessageBox]::Show("🛑 УДАЛЕНИЕ ПРЕРВАНО!`nВСЁ БЫЛО ПРАНКОМ.", "VACATAC: Mission aborted")
+    $form.Close()
+    exit
+})
+
+$btnContinue.Add_Click({
+    $form.Close()
+    for ($i = 1; $i -le 10; $i++) {
+        Write-Slow "Wip3:: \$Backup_$i.sysx"
+        Start-Sleep -Milliseconds 200
+    }
+    [Windows.Forms.MessageBox]::Show("💀 Удаление завершено.","SYSTEM REFORMAT COMPLETE")
+})
+
+$btnSpeed.Add_Click({
+    $form.Close()
+    for ($i = 1; $i -le 100; $i++) {
+        Write-Host "!!! WIPING SECTOR #$i..." -ForegroundColor DarkRed
+        Start-Sleep -Milliseconds 30
+    }
+    [Windows.Forms.MessageBox]::Show("🔥 Перезагрузка невозможна.","KERNEL DEADLOCK")
+})
+
+[void]$form.ShowDialog()

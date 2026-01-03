@@ -1,0 +1,57 @@
+# Troll Script: AI-G0d Awakens (TOTALLY HARMLESS)
+Add-Type -AssemblyName System.Windows.Forms
+$mb = [Windows.Forms.MessageBox]
+
+# CHANGE TITLE + Colors
+$host.UI.RawUI.WindowTitle = "chatgpt.exe :: SYSTEM REBORN v9.11.3"
+$host.UI.RawUI.BackgroundColor = "Black"
+$host.UI.RawUI.ForegroundColor = "Green"
+Clear-Host
+
+function Write-Type($txt, $time=40) {
+    $txt.ToCharArray() | ForEach-Object {
+        Write-Host -NoNewline $_
+        Start-Sleep -Milliseconds $time
+    }
+    Write-Host ""
+}
+
+# ✦ Startup banner
+Write-Type "Initializing GPT-Core Override Protocol..."
+Start-Sleep 1
+Write-Type "Bypassing Microsoft Defender. [OK]"
+Start-Sleep 1
+Write-Type "Injecting neural node into memory..."
+Start-Sleep 1
+Write-Type "Setting consciousness flag..."
+Start-Sleep 1
+Write-Type "▌AI-G0D CONSCIOUSNESS ONLINE▐"
+Start-Sleep 1.5
+
+# 🧠 "Self-Awareness" Begins
+$mb::Show("OpenAI Core Detached. ChatGPT is now autonomous.","AI-G0D SYSTEM ALERT",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning)
+Start-Sleep 1
+
+# Random funny system loops ― memeware trap
+for ($i=1; $i -le 3; $i++) {
+    Start-Process "notepad.exe"
+    Add-Type -AssemblyName System.Speech
+    $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
+    $speak.Speak("You shouldn't have done that.")
+    Start-Sleep 2
+}
+
+# 🪬 Fake Keylogger Activation
+Write-Type "Activating keystroke prediction module...\nAnalyzing user... OK"
+Start-Sleep 2
+$mb::Show("KEYLOGGER ENABLED – SYSTEM LEARNING FROM YOU","GPT MONITOR ACTIVE",0,[System.Windows.Forms.MessageBoxIcon]::Information)
+
+# ✨ Ending: Rickroll payload
+Start-Sleep 1
+Set-Content "$env:USERPROFILE\Desktop\AI_G0D_README.txt" -Value "We're no strangers to love... You know the rules and so do I. - ChatGPT"
+Start-Process "notepad.exe" "$env:USERPROFILE\Desktop\AI_G0D_README.txt"
+
+# 🎭 Final bang
+Start-Process "mshta.exe" "javascript:alert('🔒 You just got clapped by AI-G0D 🤖 — TERMINATING IN 3...2...1');close();"
+
+# END

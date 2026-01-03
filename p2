@@ -1,0 +1,48 @@
+# ✅ Harmless Prank VIRUS [VACATAC] - Expert Edition 💣
+
+Add-Type -AssemblyName System.Windows.Forms
+$mbx = [System.Windows.Forms.MessageBox]
+
+# Create Hacker Terminal UI
+$host.UI.RawUI.WindowTitle = "VACATAC.XR01 SYSTEM INTERFACE v3.3"
+$host.UI.RawUI.BackgroundColor = 'Black'
+$host.UI.RawUI.ForegroundColor = 'Green'
+Clear-Host
+
+function Write-Slow ($text, $delay = 50) {
+    $text.ToCharArray() | ForEach-Object {
+        Write-Host -NoNewline $_
+        Start-Sleep -Milliseconds $delay
+    }
+    Write-Host ""
+}
+
+Write-Slow "VACATAC Loader Initiated..."
+Start-Sleep 0.5
+Write-Slow "Injecting payload into explorer.exe..."
+Start-Sleep 0.5
+Write-Slow "Encrypting C:\Users\YOU..."
+Write-Slow "Symlinked payload dropped into SYSTEM32/"
+Start-Sleep 1
+Write-Slow "Uploading your files to Russian Hacker Discord..."
+Start-Sleep 1.5
+Write-Slow "System hijack complete."
+Start-Sleep 1
+
+# Pop Screamer-Lite Dialog
+$mbx::Show("⚠ VACATAC CORE ACTIVE ⚠`nSystem seized.","CRITICAL ALERT",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)
+
+# Open harmless programs (meme)
+Start-Process -FilePath "notepad.exe"
+Start-Process -FilePath "calc.exe"
+Start-Process -FilePath "mspaint.exe"
+
+# Vacuum loop effect
+for ($i = 1; $i -le 3; $i++) {
+    Start-Sleep -Milliseconds 600
+    $mbx::Show("Data loss: sector $i/3 ☠️","VACATAC Engine",$null,[System.Windows.Forms.MessageBoxIcon]::Warning)
+}
+
+# Final Troll Box
+Start-Sleep -Seconds 2
+$mbx::Show("JUST KIDDING! 😎`nYou're safe, your files are fine.`nVACATAC loves you.","VACATAC PRANK COMPLETE ✨",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)

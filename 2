@@ -1,123 +1,73 @@
-#requires -version 5.1
-<#
-.SYNOPSIS
-  Пранк: делает фото с веб-камеры, ставит его на фон рабочего стола + TTS
-
-.DESCRIPTION  
-  PowerShell скрипт без GUI, без архивов, без админа.
-  Использует ffmpeg (скачивает только .exe), проверяет SHA256, сохраняет снимок, делает фоном.
-
-.AUTHOR
-  DEFCON-grade Scriptlord 🛠️ ☠️
-#>
-
-# Отключаем ошибки на экране
+# PowerShell 5.1 compatible prank-script: webcam snapshot > set as wallpaper > TTS + cleanup
 $ErrorActionPreference = "SilentlyContinue"
-
-# ==== СЕКЦИЯ 1 — ПОДГОТОВКА ПАПОК, ЛОГОВ ==== #
 $temp = "$env:TEMP\WebPrank"
 $log = "$temp\log.txt"
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
-
 function Write-Log {
-    param([string]$msg)
+    param ([string]$msg)
     Add-Content -Path $log -Value "$(Get-Date -Format 'HH:mm:ss') :: $msg"
 }
+Write-Log "Скрипт стартовал."
 
-Write-Log "Скрипт запущен."
-
-# ==== СЕКЦИЯ 2 — СКАЧИВАЕМ FFMPEG-EXE ==== #
-$ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-$ffmpegDownloadPage = Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/" -UseBasicParsing
-
-# ⚠️ У Gyan.dev нет прямой ссылки на .exe — только ZIP
-# Следовательно, предложи способ выгрузки .exe напрямую
-
-Write-Log "Прямая ссылка на .exe отсутствует. Используем workaround с Gyan.dev + распаковка"
-
-# Загружаем архив временно, потом извлекаем нужный .exe без зависимостей
-$ffmpegZipUrl = ($ffmpegDownloadPage.Links | Where-Object { $_.href -match "ffmpeg-release.*essential.*\.zip$" })[0].href
-$fullZipUrl = "https://www.gyan.dev$ffmpegZipUrl"
+# === Скачиваем и извлекаем ffmpeg без ZIP UI ===
+$ffmpegPage = Invoke-WebRequest "https://www.gyan.dev/ffmpeg/builds/" -UseBasicParsing
+$zipRelative = ($ffmpegPage.Links | Where-Object href -Match "ffmpeg-release.*essential.*\.zip$")[0].href
+$zipUrl = "https://www.gyan.dev$zipRelative"
 $zipPath = "$temp\ffmpeg.zip"
-Invoke-WebRequest -Uri $fullZipUrl -OutFile $zipPath
-Write-Log "Архив ffmpeg скачан: $zipPath"
+Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+Write-Log "FFmpeg ZIP скачан."
 
-# Извлекаем только ffmpeg.exe
+# Извлечение
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, "$temp\ffmpeg")
-
-$ffmpegExe = Get-ChildItem -Path "$temp\ffmpeg\" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+$ffmpegExe = Get-ChildItem -Path "$temp\ffmpeg" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
 if (-not $ffmpegExe) {
-    Write-Log "ffmpeg.exe не найден в архиве"
+    Write-Log "ffmpeg.exe не найден."
     [IO.File]::WriteAllText("$env:USERPROFILE\Desktop\no.txt", "Ошибка: ffmpeg не найден.")
     exit
 }
-Write-Log "ffmpeg.exe найден: $($ffmpegExe.FullName)"
+Write-Log "FFmpeg найден: $($ffmpegExe.FullName)"
 
-# ==== СЕКЦИЯ 3 — ПРОВЕРКА SHA256 ==== #
-$expectedHash = "A_FAKE_PLACEHOLDER_HASH_256" # ⚠ Вставь реальный SHA256 release
-$actualHash = Get-FileHash -Path $ffmpegExe.FullName -Algorithm SHA256 | Select-Object -ExpandProperty Hash
-Write-Log "SHA256 ffmpeg: $actualHash"
-
-if ($expectedHash -ne "A_FAKE_PLACEHOLDER_HASH_256") {
-    if ($actualHash -ne $expectedHash) {
-        Write-Log "Ошибка: Хеш не совпадает!"
-        [IO.File]::WriteAllText("$env:USERPROFILE\Desktop\no.txt", "Предупреждение: ffmpeg нарушен.")
-        exit
-    }
-}
-
-# ==== СЕКЦИЯ 4 — ПРОВЕРКА ВЕБ-КАМЕРЫ ==== #
-Write-Log "Проверка веб-камеры через ffmpeg..."
-$testCmd = "$($ffmpegExe.FullName) -f dshow -list_devices true -i dummy" 
-$camOutput = & cmd /c $testCmd 2>&1
-
-if ($camOutput -notmatch "video devices") {
-    Write-Log "Камера не найдена."
+# Проверка веб-камеры
+$testCmd = "$($ffmpegExe.FullName) -f dshow -list_devices true -i dummy"
+$result = & cmd /c $testCmd 2>&1
+if ($result -notmatch "video devices") {
+    Write-Log "Вебкамера не найдена."
     [IO.File]::WriteAllText("$env:USERPROFILE\Desktop\no.txt", "Камера не обнаружена.")
     exit
 }
+Write-Log "Камера найдена."
 
-# ==== СЕКЦИЯ 5 — ФОТО СЕССИЯ ==== #
-$outputImage = "$temp\face.jpg"
-& cmd /c "$($ffmpegExe.FullName) -f dshow -i video=""video=*" -frames:v 1 $outputImage"
-
-if (-not (Test-Path $outputImage)) {
-    Write-Log "Фото не создано."
+# Снимок
+$snapshotPath = "$temp\snap.jpg"
+& cmd /c "$($ffmpegExe.FullName) -f dshow -i video=""video=*" -frames:v 1 ""$snapshotPath"" -y"
+if (!(Test-Path $snapshotPath)) {
+    Write-Log "Не удалось сделать снимок."
     exit
 }
+Write-Log "Снимок сделан: $snapshotPath"
 
-Write-Log "Фото создано: $outputImage"
-
-# ==== СЕКЦИЯ 6 — ОБОИ ==== #
-function Set-Wallpaper($file) {
-    Add-Type @"
-    using System.Runtime.InteropServices;
-    public class Wallpaper {
-        [DllImport("user32.dll", SetLastError=true)]
-        public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-    }
+# === ОБОИ БЕЗ using ===
+function Set-Wallpaper($path) {
+    $signature = @"
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 "@
-    [Wallpaper]::SystemParametersInfo(20, 0, $file, 3) | Out-Null
+    Add-Type -MemberDefinition $signature -Name "Win32" -Namespace "Wallpaper" -PassThru | Out-Null
+    [Wallpaper.Win32]::SystemParametersInfo(20, 0, $path, 3) | Out-Null
 }
+Set-Wallpaper -path $snapshotPath
+Write-Log "Обои установлены."
 
-Set-Wallpaper -file $outputImage
-Write-Log "Фото установлено в качестве обоев."
-
-# ==== СЕКЦИЯ 7 — TTS ПОЛЁТ ==== #
+# === TTS ===
 Add-Type -AssemblyName System.Speech
-$tts = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$tts.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male)
-$tts.Speak("Теперь ты на фоне.")
+$sp = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$sp.Speak("Теперь ты на фоне.")
 
-# ==== СЕКЦИЯ 8 — Диалог ==== #
+# === Диалог ===
 Add-Type -AssemblyName PresentationFramework
 [System.Windows.MessageBox]::Show("Пранк удался", "👻 Ха-ха!", 'OK', 'Information')
 
-# ==== СЕКЦИЯ 9 — УБОРКА ==== #
+# === Очистка ===
 Remove-Item -Path $temp -Recurse -Force
-Write-Log "Очистка завершена."
-
-# ==== СЕКЦИЯ 10 — ФИНАЛ ====
-Write-Log "Скрипт завершён успешно." 
-exit
+Write-Log "Очистка завершена. Успех."

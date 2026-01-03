@@ -1,61 +1,31 @@
-Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName System.Speech
 Add-Type -AssemblyName Microsoft.VisualBasic
 
-# Hide Console Window
+# Hide Console
 Add-Type -Name Win -Namespace H -MemberDefinition '
   [DllImport("kernel32.dll")]public static extern IntPtr GetConsoleWindow();
   [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
 $consolePtr = [H.Win]::GetConsoleWindow()
 [H.Win]::ShowWindow($consolePtr, 0)
 
-# Text To Speech Init
-$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$speak.Rate = -2
-$speak.SelectVoice('Microsoft Zira Desktop')
+# Create temp directory
+$TempPath = "$env:TEMP\prnkcam"
+New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
+$FfmpegPath = "$TempPath\ffmpeg.exe"
+$ImagePath = "$TempPath\you_have_been_captured.jpg"
 
-# Scary Speech Sequence
-$speak.Speak("WARNING. Unauthorized activity detected.")
-Start-Sleep -Milliseconds 800
-$speak.Speak("System lockdown commencing in three two one...")
-Start-Sleep -Milliseconds 1000
-
-# Keyboard light flickering (Scroll lock)
-for ($i = 0; $i -lt 5; $i++) {
-    (New-Object -ComObject WScript.Shell).SendKeys("{SCROLLLOCK}")
-    Start-Sleep -Milliseconds 300
+# Download ffmpeg (static build, cam-support, ~5MB) if not exists
+if (!(Test-Path $FfmpegPath)) {
+    Invoke-WebRequest -Uri "https://github.com/ffbinaries/ffbinaries-prebuilt/releases/download/v4.4.1/ffmpeg-win64.zip" -OutFile "$TempPath\ffmpeg.zip" -UseBasicParsing
+    Expand-Archive -Path "$TempPath\ffmpeg.zip" -DestinationPath $TempPath -Force
+    Move-Item -Path "$TempPath\ffmpeg.exe" -Destination $FfmpegPath -Force
+    Remove-Item "$TempPath\ffmpeg.zip" -Force
 }
 
-# Fake terminal format output
-Write-Host "`e[91mInitiating programmatic wipe..." -ForegroundColor Red
-for ($i=0; $i -le 100; $i+=4) {
-    Write-Host -NoNewline "$i% "
-    Start-Sleep -Milliseconds 80
-}
-Write-Host "`n`e[92mDrive formatted successfully."
+# Take photo from default camera
+Start-Process -FilePath $FfmpegPath -ArgumentList "-f dshow -i video=`"video=Integrated Camera`" -vframes 1 `"$ImagePath`"" -Wait -NoNewWindow
 
-# Mouse freeze simulation (lock in place)
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class Cursor {
-    [DllImport("user32.dll")]
-    public static extern bool SetCursorPos(int X, int Y);
-}
-"@
-for ($j=0; $j -lt 20; $j++) {
-    [Cursor]::SetCursorPos(800, 500)
-    Start-Sleep -Milliseconds 80
-}
-
-# Open Camera App (light turns on)
-Start-Process "microsoft.windows.camera:"
-Start-Sleep -Seconds 1
-$speak.Speak("We see you...")
-
-# Change Desktop Wallpaper (creepy optional twist)
-$path = "$env:TEMP\you_are_not_safe.jpg"
-Invoke-WebRequest "https://i.imgur.com/qD429oF.jpg" -OutFile $path -UseBasicParsing
+# Set the captured image as wallpaper
 Add-Type @"
 using System.Runtime.InteropServices;
 public class Wallpaper {
@@ -63,16 +33,15 @@ public class Wallpaper {
   public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 }
 "@
-[Wallpaper]::SystemParametersInfo(20, 0, $path, 3)
+[Wallpaper]::SystemParametersInfo(20, 0, $ImagePath, 3)
 
-# Final Scary TTS Line
-$speak.Speak("Just kidding. You are safe, for now.")
+# TTS Message
+$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$speak.Rate = -1
+$speak.Volume = 100
+$speak.Speak("Smile. You’ve been captured.")
+Start-Sleep -Milliseconds 700
+$speak.Speak("You are now part of the wallpaper.")
 
-# Play default Windows sound
-Add-Type -AssemblyName System.Media
-$player = New-Object System.Media.SoundPlayer
-$player.SoundLocation = "$env:windir\Media\Windows Foreground.wav"
-$player.PlaySync()
-
-# Message Box saying it's a prank
-[Microsoft.VisualBasic.Interaction]::MsgBox("Chill. It’s just a prank. No system changes made. - v1r_s.ps1", "OKOnly,Info", "😼 Gotcha")
+# Messagebox
+[Microsoft.VisualBasic.Interaction]::MsgBox("This was a prank. No data was sent. Check your desktop 😈", "OKOnly,Info", "Prank Complete")
